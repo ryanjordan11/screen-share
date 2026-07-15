@@ -28,7 +28,9 @@ import {
   Bell,
   Terminal,
   Activity,
-  Volume2
+  Volume2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { ScreenshotItem, ImageAdjustments, PresetFilter, ScreenStream, ChatMessage } from './types.js';
 
@@ -121,6 +123,10 @@ export default function App() {
   // Interactive statuses
   const [copyStatus, setCopyStatus] = useState(false);
   const [shareStatus, setShareStatus] = useState(false);
+
+  // Theme support
+  const [theme, setTheme] = useState<'neon-dark' | 'neon-light'>('neon-dark');
+  const isDark = theme === 'neon-dark';
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -630,14 +636,18 @@ export default function App() {
         const code = match ? match[2] : part.slice(3, -3);
 
         return (
-          <div key={index} className="my-3 font-mono text-[11px] bg-slate-950 border border-slate-900 rounded-lg overflow-hidden text-emerald-400 max-w-full">
-            <div className="flex items-center justify-between bg-slate-900/60 px-3 py-1.5 border-b border-slate-950 text-[9px] text-slate-500 font-sans">
+          <div key={index} className={`my-3 font-mono text-[11px] rounded-lg overflow-hidden max-w-full ${
+            isDark ? 'bg-black border border-cyan-500/30 text-cyan-400' : 'bg-slate-900 border border-slate-800 text-cyan-300'
+          }`}>
+            <div className={`flex items-center justify-between px-3 py-1.5 border-b text-[9px] font-sans ${
+              isDark ? 'bg-zinc-950 border-zinc-900 text-zinc-500' : 'bg-slate-950 border-slate-900 text-slate-400'
+            }`}>
               <span className="font-semibold uppercase tracking-wider">{lang || 'Code'}</span>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(code);
                 }}
-                className="hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                className="hover:text-white transition-colors cursor-pointer flex items-center gap-1 font-semibold"
               >
                 <Copy className="h-3 w-3" /> Copy
               </button>
@@ -649,22 +659,24 @@ export default function App() {
 
       const lines = part.split('\n');
       return (
-        <div key={index} className="space-y-1.5 leading-relaxed text-slate-300">
+        <div key={index} className={`space-y-1.5 leading-relaxed ${isDark ? 'text-zinc-300' : 'text-slate-800'}`}>
           {lines.map((line, lineIdx) => {
             if (line.startsWith('### ')) {
-              return <h4 key={lineIdx} className="text-xs font-bold text-slate-200 mt-2.5 mb-1">{line.replace('### ', '')}</h4>;
+              return <h4 key={lineIdx} className={`text-xs font-bold mt-2.5 mb-1 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>{line.replace('### ', '')}</h4>;
             }
             if (line.startsWith('## ')) {
-              return <h3 key={lineIdx} className="text-sm font-bold text-white mt-3 mb-1.5 border-b border-slate-900 pb-1">{line.replace('## ', '')}</h3>;
+              return <h3 key={lineIdx} className={`text-sm font-bold mt-3 mb-1.5 border-b pb-1 ${
+                isDark ? 'text-fuchsia-400 border-zinc-800' : 'text-fuchsia-600 border-slate-200'
+              }`}>{line.replace('## ', '')}</h3>;
             }
             if (line.startsWith('- ') || line.startsWith('* ')) {
               return (
-                <li key={lineIdx} className="ml-4 list-disc text-xs text-slate-300">
+                <li key={lineIdx} className="ml-4 list-disc text-xs">
                   {renderInlineMarkdown(line.slice(2))}
                 </li>
               );
             }
-            return <p key={lineIdx} className="text-xs text-slate-300">{renderInlineMarkdown(line)}</p>;
+            return <p key={lineIdx} className="text-xs">{renderInlineMarkdown(line)}</p>;
           })}
         </div>
       );
@@ -675,14 +687,36 @@ export default function App() {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, idx) => {
       if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={idx} className="font-bold text-white">{part.slice(2, -2)}</strong>;
+        return <strong key={idx} className={`font-bold ${isDark ? 'text-white' : 'text-black'}`}>{part.slice(2, -2)}</strong>;
       }
       return part;
     });
   };
 
+  // Black and Neon Styling Helpers
+  const sBgMain = isDark ? 'bg-black text-slate-100' : 'bg-slate-50 text-slate-900';
+  const sBgPanel = isDark ? 'bg-zinc-950 border-zinc-900' : 'bg-white border-slate-200 shadow-sm';
+  const sBorder = isDark ? 'border-zinc-900' : 'border-slate-200';
+  const sHeaderBg = isDark ? 'bg-black/90' : 'bg-white/95';
+  const sCard = isDark ? 'bg-zinc-950/40 border-zinc-900' : 'bg-white border-slate-200/80 shadow-xs';
+  const sInput = isDark ? 'bg-zinc-900/60 border-zinc-800 text-slate-100 focus:border-cyan-400 focus:ring-cyan-400/20' : 'bg-slate-100 border-slate-200 text-slate-900 focus:border-cyan-600 focus:ring-cyan-600/20';
+  const sMuted = isDark ? 'text-zinc-500' : 'text-slate-500';
+  const sMutedDarker = isDark ? 'text-zinc-600' : 'text-slate-400';
+  const sBtnDefault = isDark 
+    ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white' 
+    : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200';
+  
+  // Neon Accents
+  const neonCyanText = isDark ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'text-cyan-600 font-bold';
+  const neonCyanBtn = isDark ? 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_12px_rgba(6,182,212,0.45)]' : 'bg-cyan-600 hover:bg-cyan-500 text-white';
+  const neonPinkText = isDark ? 'text-fuchsia-400 drop-shadow-[0_0_8px_rgba(232,121,249,0.4)]' : 'text-fuchsia-600 font-bold';
+  const neonPinkBtn = isDark ? 'bg-fuchsia-500 hover:bg-fuchsia-400 text-black shadow-[0_0_12px_rgba(217,70,239,0.45)]' : 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white';
+  const neonLimeText = isDark ? 'text-lime-400 drop-shadow-[0_0_8px_rgba(163,230,53,0.4)]' : 'text-lime-600 font-bold';
+  const neonLimeBtn = isDark ? 'bg-lime-500 hover:bg-lime-400 text-black shadow-[0_0_12px_rgba(132,204,22,0.45)]' : 'bg-lime-600 hover:bg-lime-500 text-white';
+  const sActiveGridBorder = isDark ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-cyan-500 ring-2 ring-cyan-500/20 shadow-md';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-blue-500/30 selection:text-blue-200" id="app-viewport">
+    <div className={`min-h-screen ${sBgMain} font-sans flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 transition-colors duration-300`} id="app-viewport">
       {/* visual camera flash */}
       <AnimatePresence>
         {flash && (
@@ -698,31 +732,63 @@ export default function App() {
       </AnimatePresence>
 
       {/* Main navigation header */}
-      <header className="flex h-16 items-center justify-between border-b border-slate-900 bg-slate-950/80 backdrop-blur-xl px-6 sticky top-0 z-40" id="main-header">
+      <header className={`flex h-16 items-center justify-between border-b ${sBorder} ${sHeaderBg} backdrop-blur-xl px-6 sticky top-0 z-40 transition-colors duration-300`} id="main-header">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/20">
+          <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${isDark ? 'from-cyan-500 to-indigo-500 shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'from-cyan-600 to-indigo-600'} text-white`}>
             <Monitor className="h-4.5 w-4.5" />
           </div>
           <div>
-            <h1 className="text-sm font-extrabold tracking-tight text-white flex items-center gap-2">
-              Screen Stream <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[9px] font-bold text-blue-400 font-mono">AI WORKSPACE</span>
+            <h1 className="text-sm font-extrabold tracking-tight flex items-center gap-2">
+              <span className={isDark ? 'text-white' : 'text-slate-900'}>Screen Stream</span> 
+              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold font-mono border ${
+                isDark ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.2)]' : 'bg-cyan-50 border-cyan-200 text-cyan-700'
+              }`}>AI WORKSPACE</span>
             </h1>
-            <p className="text-[10px] text-slate-500 font-mono">
+            <p className={`text-[10px] font-mono ${sMuted}`}>
               Live context-aware screen analyzer & developer copilot
             </p>
           </div>
         </div>
 
         {/* Global actions and metrics */}
-        <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-4 text-[11px] font-mono text-slate-400 border-r border-slate-900 pr-4">
-            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
-              <Activity className="h-3.5 w-3.5 text-blue-400" />
-              Streams: <span className="font-bold text-slate-200">{streams.length}/10</span>
+        <div className="flex items-center gap-3">
+          
+          {/* Light / Dark Neon Theme Selector */}
+          <button
+            onClick={() => setTheme(isDark ? 'neon-light' : 'neon-dark')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all duration-300 cursor-pointer ${
+              isDark
+                ? 'bg-zinc-900 border-zinc-800 text-amber-400 hover:bg-zinc-800 shadow-[0_0_10px_rgba(245,158,11,0.15)]'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs'
+            }`}
+            id="theme-toggle-btn"
+            title="Toggle Light/Dark Neon Theme"
+          >
+            {isDark ? (
+              <>
+                <Sun className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-slate-300">Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon className="h-3.5 w-3.5 text-slate-700" />
+                <span>Dark Mode</span>
+              </>
+            )}
+          </button>
+
+          <div className={`hidden md:flex items-center gap-3 text-[11px] font-mono ${sMuted} border-r ${sBorder} pr-3`}>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+              isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              <Activity className={`h-3.5 w-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+              Streams: <span className="font-bold">{streams.length}/10</span>
             </div>
-            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
-              <ImageIcon className="h-3.5 w-3.5 text-indigo-400" />
-              Gallery: <span className="font-bold text-slate-200">{screenshots.length}</span>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+              isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-300' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              <ImageIcon className={`h-3.5 w-3.5 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />
+              Gallery: <span className="font-bold">{screenshots.length}</span>
             </div>
           </div>
 
@@ -731,7 +797,11 @@ export default function App() {
               href={window.location.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 text-xs font-bold text-blue-400 transition-colors cursor-pointer"
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                isDark 
+                  ? 'border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400' 
+                  : 'border-cyan-600/30 bg-cyan-50 hover:bg-cyan-100 text-cyan-700'
+              }`}
               id="header-open-tab-btn"
             >
               <Maximize2 className="h-3.5 w-3.5" />
@@ -743,12 +813,14 @@ export default function App() {
 
       {/* Alerts notification banner */}
       {error && (
-        <div className="bg-amber-500/10 border-b border-amber-500/25 px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-400" id="error-alert-bar">
+        <div className={`border-b px-6 py-2.5 flex items-center justify-between gap-3 text-xs ${
+          isDark ? 'bg-amber-500/10 border-amber-500/25 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-800'
+        }`} id="error-alert-bar">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 flex-shrink-0 text-amber-400" />
+            <ShieldAlert className="h-4 w-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-[11px] font-bold underline hover:text-amber-300 cursor-pointer">
+          <button onClick={() => setError(null)} className="text-[11px] font-bold underline hover:opacity-80 cursor-pointer">
             Dismiss
           </button>
         </div>
@@ -758,13 +830,13 @@ export default function App() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" id="main-workspace-frame">
         
         {/* Panel 1: Screen Stream Wall (Grid) */}
-        <div className="flex-1 flex flex-col p-4 border-r border-slate-900 bg-slate-950 overflow-y-auto" id="left-streams-column">
+        <div className={`flex-1 flex flex-col p-4 border-r ${sBorder} overflow-y-auto`} id="left-streams-column">
           <div className="flex items-center justify-between mb-4">
             <div className="space-y-0.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                <Monitor className="h-4 w-4 text-blue-400" /> Screen Stream Grid ({streams.length})
+              <h3 className={`text-xs font-extrabold uppercase tracking-wider font-mono flex items-center gap-1.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
+                <Monitor className={`h-4 w-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} /> Screen Stream Grid ({streams.length})
               </h3>
-              <p className="text-[10px] text-slate-500">
+              <p className={`text-[10px] ${sMuted}`}>
                 Each stream connects to an individual tab or window
               </p>
             </div>
@@ -772,7 +844,11 @@ export default function App() {
             <button
               onClick={addScreenStream}
               disabled={streams.length >= 10}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+              className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+                streams.length >= 10 
+                  ? (isDark ? 'bg-zinc-900 text-zinc-600' : 'bg-slate-200 text-slate-400')
+                  : neonCyanBtn
+              }`}
               id="btn-add-stream"
             >
               <Plus className="h-4 w-4" /> Add Screen Stream
@@ -781,21 +857,25 @@ export default function App() {
 
           {/* Screen Streams Grid Layout */}
           {streams.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl border border-dashed border-slate-900 bg-slate-900/10 my-4 max-w-2xl mx-auto space-y-4" id="streams-empty-state">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-500">
+            <div className={`flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl border border-dashed ${sBorder} ${isDark ? 'bg-zinc-950/20' : 'bg-white'} my-4 max-w-2xl mx-auto space-y-4`} id="streams-empty-state">
+              <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${
+                isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-slate-100 border-slate-200 text-slate-400'
+              }`}>
                 <Monitor className="h-7 w-7" />
               </div>
               <div className="space-y-1 max-w-sm">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">No Screens Connected</h4>
-                <p className="text-[11px] text-slate-500">
+                <h4 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDark ? 'text-zinc-300' : 'text-slate-700'}`}>No Screens Connected</h4>
+                <p className={`text-[11px] ${sMuted}`}>
                   Select windows, browser tabs, or whole monitors to build your real-time video streaming setup. You can combine up to 10 active streams in parallel!
                 </p>
               </div>
 
               {isInIframe ? (
-                <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3.5 max-w-md text-left">
-                  <p className="text-[10px] text-blue-300 leading-normal flex items-start gap-1.5 font-mono">
-                    <Info className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
+                <div className={`border rounded-xl p-3.5 max-w-md text-left ${
+                  isDark ? 'bg-cyan-500/5 border-cyan-500/15' : 'bg-cyan-50 border-cyan-100'
+                }`}>
+                  <p className={`text-[10px] leading-normal flex items-start gap-1.5 font-mono ${isDark ? 'text-cyan-300' : 'text-cyan-800'}`}>
+                    <Info className={`h-4 w-4 shrink-0 mt-0.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
                     <span>
                       <strong>Chrome Policy Notice:</strong> Browser security restricts screen-sharing inside embedded iframes. Click **"Launch in New Tab"** to capture your screen streams seamlessly.
                     </span>
@@ -804,7 +884,7 @@ export default function App() {
                     href={window.location.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-white py-2 px-4 rounded-lg transition-colors cursor-pointer"
+                    className={`mt-3 flex items-center justify-center gap-1.5 text-[10px] font-bold py-2 px-4 rounded-lg transition-colors cursor-pointer ${neonCyanBtn}`}
                   >
                     <Maximize2 className="h-3 w-3" /> Launch in New Tab
                   </a>
@@ -812,7 +892,7 @@ export default function App() {
               ) : (
                 <button
                   onClick={addScreenStream}
-                  className="rounded-lg bg-slate-900 border border-slate-800 px-4 py-2 text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  className={`rounded-lg border px-4 py-2 text-[11px] font-bold transition-colors cursor-pointer ${sBtnDefault}`}
                 >
                   Connect Screen Feed
                 </button>
@@ -826,9 +906,9 @@ export default function App() {
               'grid-cols-2 xl:grid-cols-3'
             }`} id="streams-grids-container">
               {streams.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-900 bg-slate-900/30 overflow-hidden relative group shadow-lg flex flex-col">
+                <div key={item.id} className={`rounded-xl border ${sBorder} ${isDark ? 'bg-zinc-950/40' : 'bg-white'} overflow-hidden relative group shadow-lg flex flex-col transition-all duration-300`}>
                   {/* Card Header controls */}
-                  <div className="bg-slate-950/80 px-3 py-2 border-b border-slate-900 flex items-center justify-between gap-2">
+                  <div className={`px-3 py-2 border-b ${sBorder} flex items-center justify-between gap-2 ${isDark ? 'bg-zinc-950/90' : 'bg-slate-50'}`}>
                     <input
                       type="text"
                       value={item.label}
@@ -836,16 +916,18 @@ export default function App() {
                         const val = e.target.value;
                         setStreams(list => list.map(st => st.id === item.id ? { ...st, label: val } : st));
                       }}
-                      className="bg-transparent border-0 font-mono text-[11px] font-bold text-slate-300 focus:outline-none focus:text-white truncate max-w-[150px] focus:underline"
+                      className={`bg-transparent border-0 font-mono text-[11px] font-bold focus:outline-none truncate max-w-[150px] focus:underline ${
+                        isDark ? 'text-zinc-300 focus:text-white' : 'text-slate-700 focus:text-black'
+                      }`}
                     />
                     <div className="flex items-center gap-2">
                       <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[9px] font-mono font-semibold text-slate-500 uppercase tracking-widest">LIVE</span>
+                      <span className={`text-[9px] font-mono font-semibold uppercase tracking-widest ${isDark ? 'text-zinc-500' : 'text-slate-400'}`}>LIVE</span>
                     </div>
                   </div>
 
                   {/* Video Viewport Container */}
-                  <div className="aspect-video bg-slate-950 relative overflow-hidden flex items-center justify-center">
+                  <div className={`aspect-video relative overflow-hidden flex items-center justify-center ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                     <video
                       id={`video-${item.id}`}
                       autoPlay
@@ -855,10 +937,14 @@ export default function App() {
                     />
 
                     {/* Hover tools layer */}
-                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-3 ${
+                      isDark ? 'bg-black/60' : 'bg-white/60'
+                    }`}>
                       <button
                         onClick={() => captureFrameFromStream(item)}
-                        className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-xl transition-transform active:scale-90 cursor-pointer"
+                        className={`p-2.5 rounded-full text-black shadow-xl transition-transform active:scale-90 cursor-pointer ${
+                          isDark ? 'bg-cyan-400 hover:bg-cyan-300' : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                        }`}
                         title="Take Screenshot and edit in Workbench"
                       >
                         <Camera className="h-4.5 w-4.5" />
@@ -874,11 +960,13 @@ export default function App() {
                   </div>
 
                   {/* Card bottom details */}
-                  <div className="p-2 bg-slate-950/50 flex items-center justify-between text-[9px] font-mono text-slate-500">
+                  <div className={`p-2 flex items-center justify-between text-[9px] font-mono ${isDark ? 'bg-black/80 text-zinc-500' : 'bg-slate-50 text-slate-400'}`}>
                     <span>Source: DisplayMedia API</span>
                     <button
                       onClick={() => captureFrameFromStream(item)}
-                      className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
+                      className={`font-semibold flex items-center gap-1 hover:opacity-80 transition-opacity ${
+                        isDark ? 'text-cyan-400' : 'text-cyan-600'
+                      }`}
                     >
                       <Camera className="h-3 w-3" /> Snap Frame
                     </button>
@@ -890,14 +978,15 @@ export default function App() {
         </div>
 
         {/* Panel 2: Live AI Developer Chat (Middle) */}
-        <div className="w-full lg:w-[420px] border-t lg:border-t-0 lg:border-r border-slate-900 bg-slate-950 flex flex-col shrink-0 overflow-hidden" id="middle-chat-column">
+        <div className={`w-full lg:w-[420px] border-t lg:border-t-0 lg:border-r ${sBorder} ${isDark ? 'bg-zinc-950/40' : 'bg-white'} flex flex-col shrink-0 overflow-hidden transition-colors duration-300`} id="middle-chat-column">
           {/* Chat Header and active scans */}
-          <div className="p-4 border-b border-slate-900 bg-slate-950 flex items-center justify-between gap-3">
+          <div className={`p-4 border-b ${sBorder} flex items-center justify-between gap-3 ${isDark ? 'bg-zinc-950/80' : 'bg-slate-50'}`}>
             <div>
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-blue-400" /> Screen Stream AI
+              <h3 className="text-xs font-extrabold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                <Sparkles className={`h-4 w-4 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} /> 
+                <span className={isDark ? 'text-zinc-200' : 'text-slate-800'}>Screen Stream AI</span>
               </h3>
-              <p className="text-[10px] text-slate-500">
+              <p className={`text-[10px] ${sMuted}`}>
                 Ask anything about your stream context
               </p>
             </div>
@@ -905,7 +994,11 @@ export default function App() {
             <button
               onClick={handleContextScan}
               disabled={isScanning || streams.length === 0}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-[10px] font-bold text-slate-300 hover:text-white px-2.5 py-1.5 transition-all disabled:opacity-50 cursor-pointer font-mono"
+              className={`flex items-center gap-1.5 rounded-lg border text-[10px] font-bold px-2.5 py-1.5 transition-all disabled:opacity-50 cursor-pointer font-mono ${
+                isDark 
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700' 
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
             >
               <Bell className={`h-3 w-3 text-yellow-500 ${isScanning ? 'animate-bounce' : ''}`} />
               {isScanning ? 'Scanning...' : 'Scan Context'}
@@ -919,29 +1012,37 @@ export default function App() {
                 return (
                   <div
                     key={msg.id}
-                    className={`rounded-xl p-3.5 text-xs ${
+                    className={`rounded-xl p-3.5 text-xs border transition-all ${
                       msg.isNotification
-                        ? 'bg-blue-500/5 border border-blue-500/10 text-slate-300 relative overflow-hidden'
-                        : 'bg-slate-900/60 border border-slate-900 text-slate-400'
+                        ? (isDark 
+                          ? 'bg-cyan-500/5 border-cyan-500/10 text-cyan-300 relative overflow-hidden shadow-[0_0_10px_rgba(6,182,212,0.05)]' 
+                          : 'bg-cyan-50 border-cyan-100 text-cyan-800 relative overflow-hidden')
+                        : (isDark 
+                          ? 'bg-zinc-900/60 border-zinc-900 text-zinc-400' 
+                          : 'bg-slate-100 border-slate-200 text-slate-600')
                     }`}
                   >
                     {msg.isNotification && (
-                      <div className="absolute top-2.5 right-2.5 flex h-4 w-4 items-center justify-center text-blue-400">
+                      <div className="absolute top-2.5 right-2.5 flex h-4 w-4 items-center justify-center text-cyan-500">
                         <Bell className="h-3 w-3 animate-pulse" />
                       </div>
                     )}
                     <div className="space-y-1">
                       {msg.isNotification && (
-                        <span className="text-[9px] font-bold font-mono text-blue-400 uppercase tracking-widest block mb-1">
+                        <span className={`text-[9px] font-bold font-mono uppercase tracking-widest block mb-1 ${
+                          isDark ? 'text-cyan-400' : 'text-cyan-600'
+                        }`}>
                           System Notification
                         </span>
                       )}
                       <div>{renderMessageContent(msg.text)}</div>
                       {msg.analyzedScreens && (
                         <div className="mt-2.5 flex flex-wrap gap-1 items-center">
-                          <span className="text-[8px] font-mono text-slate-500">Scanned Sources:</span>
+                          <span className={`text-[8px] font-mono ${sMuted}`}>Scanned Sources:</span>
                           {msg.analyzedScreens.map((lbl, idx) => (
-                            <span key={idx} className="bg-slate-950 border border-slate-800 px-1 py-0.2 rounded text-[8px] font-mono text-slate-400">
+                            <span key={idx} className={`border px-1 py-0.2 rounded text-[8px] font-mono ${
+                              isDark ? 'bg-zinc-950 border-zinc-800 text-zinc-400' : 'bg-slate-100 border-slate-200 text-slate-600'
+                            }`}>
                               {lbl}
                             </span>
                           ))}
@@ -955,14 +1056,20 @@ export default function App() {
               const isUser = msg.sender === 'user';
               return (
                 <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[90%] rounded-xl px-4 py-3 space-y-1 text-xs shadow-md ${
+                  <div className={`max-w-[90%] rounded-xl px-4 py-3 space-y-1 text-xs shadow-md transition-all ${
                     isUser
-                      ? 'bg-blue-600 text-white rounded-tr-none'
-                      : 'bg-slate-900/80 border border-slate-800 text-slate-100 rounded-tl-none'
+                      ? (isDark 
+                        ? 'bg-cyan-500 text-black font-semibold rounded-tr-none shadow-[0_0_15px_rgba(34,211,238,0.35)]' 
+                        : 'bg-cyan-600 text-white rounded-tr-none')
+                      : (isDark 
+                        ? 'bg-zinc-900 border border-zinc-800 text-slate-100 rounded-tl-none shadow-[0_4px_12px_rgba(0,0,0,0.5)]' 
+                        : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none')
                   }`}>
                     {/* Header bar indicating parsed visual context */}
                     {!isUser && (
-                      <div className="flex items-center gap-1 text-[9px] font-extrabold tracking-widest text-blue-400 uppercase font-mono mb-1">
+                      <div className={`flex items-center gap-1 text-[9px] font-extrabold tracking-widest uppercase font-mono mb-1 ${
+                        isDark ? 'text-fuchsia-400 drop-shadow-[0_0_8px_rgba(232,121,249,0.3)]' : 'text-fuchsia-600'
+                      }`}>
                         <Sparkles className="h-3 w-3" /> Screen Stream AI
                       </div>
                     )}
@@ -974,10 +1081,14 @@ export default function App() {
 
                     {/* Scanned streams footer metadata */}
                     {isUser && msg.analyzedScreens && msg.analyzedScreens.length > 0 && (
-                      <div className="mt-2.5 pt-1.5 border-t border-blue-500/25 flex flex-wrap gap-1 items-center">
-                        <span className="text-[8px] font-mono text-blue-200">📎 Sent with screen context:</span>
+                      <div className={`mt-2.5 pt-1.5 border-t flex flex-wrap gap-1 items-center ${
+                        isDark ? 'border-black/20' : 'border-white/20'
+                      }`}>
+                        <span className={`text-[8px] font-mono ${isDark ? 'text-cyan-950 font-bold' : 'text-cyan-100'}`}>📎 Sent with screen context:</span>
                         {msg.analyzedScreens.map((lbl, idx) => (
-                          <span key={idx} className="bg-blue-700/60 border border-blue-500/40 px-1 rounded text-[8px] font-mono text-white">
+                          <span key={idx} className={`px-1 rounded text-[8px] font-mono ${
+                            isDark ? 'bg-cyan-700/60 border border-cyan-600 text-white' : 'bg-cyan-700 text-white'
+                          }`}>
                             {lbl}
                           </span>
                         ))}
@@ -990,15 +1101,19 @@ export default function App() {
 
             {isSending && (
               <div className="flex justify-start">
-                <div className="bg-slate-900/60 border border-slate-800 text-slate-400 rounded-xl rounded-tl-none px-4 py-3 text-xs space-y-2 max-w-[90%]">
-                  <div className="flex items-center gap-1.5 text-[9px] font-bold font-mono text-blue-400 uppercase tracking-wider">
+                <div className={`border rounded-xl rounded-tl-none px-4 py-3 text-xs space-y-2 max-w-[90%] ${
+                  isDark ? 'bg-zinc-900 border-zinc-850' : 'bg-slate-100 border-slate-200'
+                }`}>
+                  <div className={`flex items-center gap-1.5 text-[9px] font-bold font-mono uppercase tracking-wider ${
+                    isDark ? 'text-cyan-400' : 'text-cyan-700'
+                  }`}>
                     <Sparkles className="h-3.5 w-3.5 animate-spin" />
                     Analyzing your screens...
                   </div>
                   <div className="flex gap-1 items-center justify-center">
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-100" />
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-200" />
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-300" />
+                    <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-100 ${isDark ? 'bg-cyan-400' : 'bg-cyan-600'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-200 ${isDark ? 'bg-cyan-400' : 'bg-cyan-600'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-300 ${isDark ? 'bg-cyan-400' : 'bg-cyan-600'}`} />
                   </div>
                 </div>
               </div>
@@ -1007,14 +1122,14 @@ export default function App() {
           </div>
 
           {/* Chat action input area */}
-          <div className="p-4 border-t border-slate-900 bg-slate-950/90 backdrop-blur" id="chat-input-container">
+          <div className={`p-4 border-t ${sBorder} ${isDark ? 'bg-black/90' : 'bg-white/90'} backdrop-blur`} id="chat-input-container">
             <form onSubmit={handleSendMessage} className="space-y-3">
               <div className="relative">
                 <textarea
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="Ask Screen Stream AI... (e.g., 'What code structure is displayed? help me build a landing page for it!')"
-                  className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-3 pr-11 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 h-20 resize-none"
+                  className={`w-full rounded-xl py-3 pl-3 pr-11 text-xs resize-none h-20 transition-all ${sInput}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -1025,7 +1140,11 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSending || (!inputValue.trim() && !includeScreens)}
-                  className="absolute bottom-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:bg-slate-800 disabled:text-slate-600 cursor-pointer"
+                  className={`absolute bottom-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                    isSending || (!inputValue.trim() && !includeScreens)
+                      ? (isDark ? 'bg-zinc-800 text-zinc-600' : 'bg-slate-200 text-slate-400')
+                      : (isDark ? 'bg-cyan-400 text-black hover:bg-cyan-300' : 'bg-cyan-600 text-white hover:bg-cyan-700')
+                  }`}
                 >
                   <Send className="h-3.5 w-3.5" />
                 </button>
@@ -1033,12 +1152,14 @@ export default function App() {
 
               {/* Advanced chat settings toggles */}
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-[10px] font-semibold font-mono text-slate-400 cursor-pointer select-none">
+                <label className={`flex items-center gap-2 text-[10px] font-semibold font-mono cursor-pointer select-none ${sMuted}`}>
                   <input
                     type="checkbox"
                     checked={includeScreens}
                     onChange={(e) => setIncludeScreens(e.target.checked)}
-                    className="rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-blue-500 h-3 w-3 accent-blue-600"
+                    className={`rounded border bg-transparent h-3 w-3 ${
+                      isDark ? 'border-zinc-800 text-cyan-400 accent-cyan-400' : 'border-slate-300 text-cyan-600 accent-cyan-600'
+                    }`}
                   />
                   <span>Include Screen context ({streams.filter((s) => s.isActive && s.stream).length} active)</span>
                 </label>
@@ -1047,7 +1168,9 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleContextScan}
-                    className="text-[9px] text-blue-400 hover:text-blue-300 font-mono font-bold"
+                    className={`text-[9px] font-mono font-bold hover:underline ${
+                      isDark ? 'text-cyan-400' : 'text-cyan-600'
+                    }`}
                   >
                     Quick context alert
                   </button>
@@ -1058,12 +1181,12 @@ export default function App() {
         </div>
 
         {/* Panel 3: Snapped Gallery & Image Workbench (Right) */}
-        <div className="w-full lg:w-[380px] border-t lg:border-t-0 bg-slate-950 flex flex-col shrink-0 overflow-y-auto" id="right-gallery-column">
+        <div className={`w-full lg:w-[380px] border-t lg:border-t-0 ${isDark ? 'bg-zinc-950/20' : 'bg-white'} flex flex-col shrink-0 overflow-y-auto transition-colors duration-300`} id="right-gallery-column">
           
           {/* Section: Snapped Roll */}
-          <div className="p-4 border-b border-slate-900 space-y-3">
+          <div className={`p-4 border-b ${sBorder} space-y-3`}>
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+              <h3 className={`text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                 <Clock className="h-3.5 w-3.5" /> Snapped Photos ({screenshots.length})
               </h3>
               {screenshots.length > 0 && (
@@ -1072,7 +1195,9 @@ export default function App() {
                     setScreenshots([]);
                     setActiveId(null);
                   }}
-                  className="text-[10px] font-medium text-slate-500 hover:text-red-400 font-mono transition-colors cursor-pointer"
+                  className={`text-[10px] font-medium font-mono transition-colors cursor-pointer ${
+                    isDark ? 'text-zinc-500 hover:text-red-400' : 'text-slate-400 hover:text-red-600'
+                  }`}
                 >
                   Clear all
                 </button>
@@ -1080,7 +1205,9 @@ export default function App() {
             </div>
 
             {screenshots.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-900 py-6 text-center text-slate-600 text-[10px] font-mono">
+              <div className={`rounded-xl border border-dashed py-6 text-center text-[10px] font-mono ${
+                isDark ? 'border-zinc-900 text-zinc-600' : 'border-slate-200 text-slate-400'
+              }`}>
                 No screenshots captured. Hover over any stream card to capture.
               </div>
             ) : (
@@ -1091,13 +1218,13 @@ export default function App() {
                     <div
                       key={item.id}
                       onClick={() => setActiveId(item.id)}
-                      className={`relative shrink-0 w-24 rounded-lg border p-1.5 bg-slate-900/30 overflow-hidden cursor-pointer transition-all ${
+                      className={`relative shrink-0 w-24 rounded-lg border p-1.5 overflow-hidden cursor-pointer transition-all ${
                         isActive
-                          ? 'border-blue-500 ring-1 ring-blue-500/20'
-                          : 'border-slate-900 hover:border-slate-800'
+                          ? (isDark ? 'border-cyan-400 ring-1 ring-cyan-400/20 bg-zinc-900/60' : 'border-cyan-500 ring-1 ring-cyan-500/10 bg-slate-100')
+                          : (isDark ? 'border-zinc-900 bg-zinc-950/20 hover:border-zinc-800' : 'border-slate-200 bg-slate-50 hover:border-slate-300')
                       }`}
                     >
-                      <div className="aspect-video bg-slate-950 rounded overflow-hidden relative">
+                      <div className={`aspect-video rounded overflow-hidden relative ${isDark ? 'bg-black' : 'bg-slate-200'}`}>
                         <img
                           src={item.originalUrl}
                           alt={item.label}
@@ -1106,12 +1233,16 @@ export default function App() {
                         />
                         <button
                           onClick={(e) => deleteScreenshot(item.id, e)}
-                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/80 border border-slate-800 hover:bg-red-500/10 hover:border-red-500/30 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                          className={`absolute top-0.5 right-0.5 p-0.5 rounded border transition-colors cursor-pointer ${
+                            isDark 
+                              ? 'bg-zinc-950/80 border-zinc-800 text-zinc-400 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20' 
+                              : 'bg-white/80 border-slate-200 text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                          }`}
                         >
                           <Trash2 className="h-2.5 w-2.5" />
                         </button>
                       </div>
-                      <p className="mt-1 text-[9px] font-semibold text-slate-300 truncate">
+                      <p className={`mt-1 text-[9px] font-semibold truncate ${isDark ? 'text-zinc-300' : 'text-slate-700'}`}>
                         {item.label}
                       </p>
                     </div>
@@ -1126,16 +1257,20 @@ export default function App() {
             <div className="p-4 space-y-5" id="workbench-active-container">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider font-mono ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                     Image Workbench
                   </span>
-                  <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                  <span className={`text-[9px] font-mono border px-1.5 py-0.5 rounded ${
+                    isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-slate-100 border-slate-200 text-slate-600'
+                  }`}>
                     {activeItem.width}x{activeItem.height} px
                   </span>
                 </div>
 
                 {/* Main image container */}
-                <div className="relative aspect-video rounded-xl border border-slate-900 bg-slate-950 overflow-hidden group shadow-md">
+                <div className={`relative aspect-video rounded-xl border overflow-hidden group shadow-md ${
+                  isDark ? 'border-zinc-900 bg-black' : 'border-slate-200 bg-slate-100'
+                }`}>
                   <img
                     src={activeItem.originalUrl}
                     alt={activeItem.label}
@@ -1143,7 +1278,9 @@ export default function App() {
                     style={{ filter: getFilterCSSString(adjustments, activeFilter) }}
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="rounded bg-slate-950/80 border border-slate-800/80 px-2 py-1 text-[8px] font-mono text-slate-300">
+                    <span className={`rounded px-2 py-1 text-[8px] font-mono border ${
+                      isDark ? 'bg-zinc-950/90 border-zinc-850 text-cyan-400' : 'bg-white/90 border-slate-200 text-slate-600'
+                    }`}>
                       Baking Live Filters
                     </span>
                   </div>
@@ -1160,28 +1297,34 @@ export default function App() {
                       )
                     );
                   }}
-                  className="w-full bg-transparent border-b border-slate-900 hover:border-slate-800 focus:border-blue-500 focus:outline-none text-xs font-semibold text-slate-100 py-1"
+                  className={`w-full bg-transparent border-b focus:outline-none text-xs font-semibold py-1 transition-colors ${
+                    isDark ? 'border-zinc-800 hover:border-zinc-700 focus:border-cyan-400 text-slate-100' : 'border-slate-200 hover:border-slate-300 focus:border-cyan-600 text-slate-900'
+                  }`}
                   placeholder="Screenshot Label"
                 />
               </div>
 
               {/* Export Panel */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
+                <div className={`flex items-center justify-between text-[9px] font-mono ${sMuted}`}>
                   <span>Export Actions</span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setExportFormat('png')}
-                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                        exportFormat === 'png' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-500'
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase cursor-pointer ${
+                        exportFormat === 'png' 
+                          ? (isDark ? 'bg-cyan-500 text-black font-extrabold shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'bg-cyan-600 text-white')
+                          : (isDark ? 'bg-zinc-900 text-zinc-500' : 'bg-slate-200 text-slate-500')
                       }`}
                     >
                       PNG
                     </button>
                     <button
                       onClick={() => setExportFormat('jpeg')}
-                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                        exportFormat === 'jpeg' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-500'
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase cursor-pointer ${
+                        exportFormat === 'jpeg' 
+                          ? (isDark ? 'bg-cyan-500 text-black font-extrabold shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'bg-cyan-600 text-white')
+                          : (isDark ? 'bg-zinc-900 text-zinc-500' : 'bg-slate-200 text-slate-500')
                       }`}
                     >
                       JPG
@@ -1192,23 +1335,31 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleCopyToClipboard}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
+                    className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-bold transition-colors cursor-pointer ${
+                      isDark 
+                        ? 'bg-zinc-900 hover:bg-zinc-850 border-zinc-800 text-slate-300' 
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                    }`}
                   >
-                    {copyStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-blue-400" />}
+                    {copyStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className={`h-3.5 w-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />}
                     <span>{copyStatus ? 'Copied' : 'Copy'}</span>
                   </button>
                   <button
                     onClick={handleShare}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
+                    className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-bold transition-colors cursor-pointer ${
+                      isDark 
+                        ? 'bg-zinc-900 hover:bg-zinc-850 border-zinc-800 text-slate-300' 
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                    }`}
                   >
-                    {shareStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Share2 className="h-3.5 w-3.5 text-indigo-400" />}
+                    {shareStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Share2 className={`h-3.5 w-3.5 ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`} />}
                     <span>{shareStatus ? 'Shared' : 'OS Share'}</span>
                   </button>
                 </div>
 
                 <button
                   onClick={handleDownload}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/10 cursor-pointer"
+                  className={`w-full flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold text-white transition-all cursor-pointer ${neonCyanBtn}`}
                 >
                   <Download className="h-3.5 w-3.5" /> Download Snapshot
                 </button>
@@ -1217,7 +1368,7 @@ export default function App() {
               {/* Filters list */}
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  <span className={`block text-[10px] font-bold uppercase tracking-wider font-mono ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                     Mood Filters
                   </span>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -1227,8 +1378,8 @@ export default function App() {
                         onClick={() => updateActiveFilter(f)}
                         className={`py-1 text-[9px] font-bold rounded border transition-all truncate cursor-pointer ${
                           activeFilter === f
-                            ? 'border-blue-500 bg-blue-500/10 text-slate-100'
-                            : 'border-slate-900 bg-slate-900/20 text-slate-500 hover:border-slate-800'
+                            ? (isDark ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.15)]' : 'border-cyan-600 bg-cyan-50 text-cyan-700')
+                            : (isDark ? 'border-zinc-900 bg-zinc-900/20 text-zinc-500 hover:border-zinc-800' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300')
                         }`}
                       >
                         {f}
@@ -1240,12 +1391,12 @@ export default function App() {
                 {/* Adjustments */}
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider font-mono flex items-center gap-1.5 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
                       <Sliders className="h-3 w-3" /> Sliders
                     </span>
                     <button
                       onClick={() => updateActiveAdjustments(DEFAULT_ADJUSTMENTS)}
-                      className="text-[9px] text-slate-500 hover:text-slate-300 font-mono cursor-pointer"
+                      className={`text-[9px] font-mono cursor-pointer ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Reset
                     </button>
@@ -1262,7 +1413,7 @@ export default function App() {
                       max="150"
                       value={adjustments.brightness}
                       onChange={(e) => updateActiveAdjustments({ brightness: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
+                      className="w-full accent-cyan-400 cursor-pointer h-1 bg-zinc-800 rounded appearance-none"
                     />
                   </div>
 
@@ -1277,7 +1428,7 @@ export default function App() {
                       max="150"
                       value={adjustments.contrast}
                       onChange={(e) => updateActiveAdjustments({ contrast: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
+                      className="w-full accent-cyan-400 cursor-pointer h-1 bg-zinc-800 rounded appearance-none"
                     />
                   </div>
 
@@ -1292,7 +1443,7 @@ export default function App() {
                       max="200"
                       value={adjustments.saturation}
                       onChange={(e) => updateActiveAdjustments({ saturation: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
+                      className="w-full accent-cyan-400 cursor-pointer h-1 bg-zinc-800 rounded appearance-none"
                     />
                   </div>
 
@@ -1307,7 +1458,7 @@ export default function App() {
                       max="10"
                       value={adjustments.blur}
                       onChange={(e) => updateActiveAdjustments({ blur: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
+                      className="w-full accent-cyan-400 cursor-pointer h-1 bg-zinc-800 rounded appearance-none"
                     />
                   </div>
 
@@ -1315,7 +1466,9 @@ export default function App() {
                     <button
                       onClick={() => updateActiveAdjustments({ grayscale: !adjustments.grayscale })}
                       className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
-                        adjustments.grayscale ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                        adjustments.grayscale 
+                          ? (isDark ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300' : 'border-cyan-600 bg-cyan-50 text-cyan-700') 
+                          : (isDark ? 'border-zinc-900 bg-zinc-900/10 text-zinc-500 hover:border-zinc-800' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300')
                       }`}
                     >
                       Grayscale
@@ -1323,7 +1476,9 @@ export default function App() {
                     <button
                       onClick={() => updateActiveAdjustments({ sepia: !adjustments.sepia })}
                       className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
-                        adjustments.sepia ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                        adjustments.sepia 
+                          ? (isDark ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300' : 'border-cyan-600 bg-cyan-50 text-cyan-700') 
+                          : (isDark ? 'border-zinc-900 bg-zinc-900/10 text-zinc-500 hover:border-zinc-800' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300')
                       }`}
                     >
                       Sepia
@@ -1331,7 +1486,9 @@ export default function App() {
                     <button
                       onClick={() => updateActiveAdjustments({ invert: !adjustments.invert })}
                       className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
-                        adjustments.invert ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                        adjustments.invert 
+                          ? (isDark ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300' : 'border-cyan-600 bg-cyan-50 text-cyan-700') 
+                          : (isDark ? 'border-zinc-900 bg-zinc-900/10 text-zinc-500 hover:border-zinc-800' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300')
                       }`}
                     >
                       Invert
@@ -1341,13 +1498,15 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3 text-slate-600">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 border border-slate-900 text-slate-700">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-xl border ${
+                isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-600' : 'bg-slate-100 border-slate-200 text-slate-400'
+              }`}>
                 <ImageIcon className="h-5 w-5" />
               </div>
               <div className="space-y-1 max-w-xs">
-                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Workbench Unloaded</h4>
-                <p className="text-[10px] text-slate-500 leading-normal">
+                <h4 className={`text-[11px] font-bold uppercase tracking-wider font-mono ${isDark ? 'text-zinc-450' : 'text-slate-600'}`}>Workbench Unloaded</h4>
+                <p className={`text-[10px] leading-normal ${sMuted}`}>
                   Hover over any active stream video panel and click **"Snap Frame"** to load screenshots in the custom edit workbench.
                 </p>
               </div>
