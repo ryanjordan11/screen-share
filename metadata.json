@@ -1,0 +1,6 @@
+{
+  "name": "Screenshare with Chat",
+  "description": "Capture and edit high-resolution screen frames directly in your browser with advanced adjustments and preset filters.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
