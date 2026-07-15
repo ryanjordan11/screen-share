@@ -13,7 +13,6 @@ import {
   Trash2,
   Sparkles,
   Monitor,
-  RefreshCw,
   Sliders,
   Check,
   Image as ImageIcon,
@@ -22,11 +21,16 @@ import {
   Maximize2,
   Settings,
   Grid,
-  ChevronRight,
   ShieldAlert,
-  ChevronLeft
+  Send,
+  Plus,
+  Eye,
+  Bell,
+  Terminal,
+  Activity,
+  Volume2
 } from 'lucide-react';
-import { ScreenshotItem, ImageAdjustments, PresetFilter } from './types.js';
+import { ScreenshotItem, ImageAdjustments, PresetFilter, ScreenStream, ChatMessage } from './types.js';
 
 // Synthesize physical DSLR shutter click using Web Audio API
 const playShutterSound = () => {
@@ -83,25 +87,31 @@ const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   invert: false,
 };
 
+const INITIAL_CHAT: ChatMessage[] = [
+  {
+    id: 'welcome',
+    sender: 'system',
+    text: '👋 **Welcome to Screen Stream AI Workspace!**\n\nStart by clicking **"+ Add Screen Stream"** in the grid panel. You can stream in up to 10 screens, browser tabs, or windows simultaneously!\n\nOur AI Assistant is fully context-aware—it sees all active screens in real-time. Ask it to **explain layouts, help develop SASS apps, or write code** based on what is shown on your screen streams.',
+    timestamp: Date.now()
+  }
+];
+
 export default function App() {
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
+  const [streams, setStreams] = useState<ScreenStream[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
 
-  // Detect if the app is rendered in an iframe
-  useEffect(() => {
-    try {
-      setIsInIframe(window.self !== window.top);
-    } catch (e) {
-      setIsInIframe(true);
-    }
-  }, []);
-
   // Gallery and active workbench
   const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Chat parameters
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
+  const [inputValue, setInputValue] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [includeScreens, setIncludeScreens] = useState(true);
 
   // Active edits
   const [adjustments, setAdjustments] = useState<ImageAdjustments>({ ...DEFAULT_ADJUSTMENTS });
@@ -112,31 +122,88 @@ export default function App() {
   const [copyStatus, setCopyStatus] = useState(false);
   const [shareStatus, setShareStatus] = useState(false);
 
-  // Refs
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const renderCanvasRef = useRef<HTMLCanvasElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Start capturing the screen/window/tab feed
-  const startCapture = async () => {
+  // Detect if the app is rendered in an iframe
+  useEffect(() => {
+    try {
+      setIsInIframe(window.self !== window.top);
+    } catch (e) {
+      setIsInIframe(true);
+    }
+  }, []);
+
+  // Bind video sources whenever streams change
+  useEffect(() => {
+    streams.forEach((item) => {
+      if (item.isActive && item.stream) {
+        const videoEl = document.getElementById(`video-${item.id}`) as HTMLVideoElement | null;
+        if (videoEl && videoEl.srcObject !== item.stream) {
+          videoEl.srcObject = item.stream;
+          videoEl.play().catch((e) => console.log('Video playback error:', e));
+        }
+      }
+    });
+  }, [streams]);
+
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      streams.forEach((s) => {
+        if (s.stream) {
+          s.stream.getTracks().forEach((track) => track.stop());
+        }
+      });
+    };
+  }, []);
+
+  // Scroll to bottom of chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isSending]);
+
+  // Request a new display media capture
+  const addScreenStream = async () => {
     try {
       setError(null);
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          displaySurface: 'monitor',
-          width: { ideal: 3840 }, // Get full resolution
-          height: { ideal: 2160 },
-          frameRate: { ideal: 30 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
         },
-        audio: false,
+        audio: false
       });
 
-      setStream(mediaStream);
-      setIsCapturing(true);
+      const streamId = 'stream_' + Math.random().toString(36).substring(2, 11);
+      const nextNum = streams.length + 1;
+      const newStreamItem: ScreenStream = {
+        id: streamId,
+        label: `Screen Stream ${nextNum}`,
+        stream: mediaStream,
+        isActive: true,
+        timestamp: Date.now()
+      };
 
       // Handle stream ended via browser stop-sharing widget
       mediaStream.getVideoTracks()[0].onended = () => {
-        stopCapture();
+        disconnectStream(streamId);
       };
+
+      setStreams((prev) => [...prev, newStreamItem]);
+
+      // Add a system notification update in the feed
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'sys_' + Math.random().toString(36).substring(2, 11),
+          sender: 'system',
+          text: `📡 **Connected a new live feed:** "${newStreamItem.label}". Click **"Scan Context"** above to analyze this stream!`,
+          timestamp: Date.now(),
+          isNotification: true
+        }
+      ]);
+
     } catch (err: any) {
       console.error('getDisplayMedia error:', err);
       const errString = String(err);
@@ -147,69 +214,65 @@ export default function App() {
         err.name === 'SecurityError'
       ) {
         setError(
-          'Security Constraint: Chrome & other modern browsers block screen capture inside sandboxed/embedded previews. To use screen capture, please click "Open in New Tab" at the top right of the page to launch the app directly!'
+          'Security Constraint: Screen Capture is blocked within sandboxed iframe previews. Please click "Open in New Tab" at the top right to start streaming.'
         );
       } else {
-        setError('Could not access capture source. Please allow permission to take screenshots.');
+        setError('Could not access capture source: ' + err.message);
       }
     }
   };
 
-  // Stop capturing the screen feed
-  const stopCapture = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-    setIsCapturing(false);
+  // Disconnect an active screen stream
+  const disconnectStream = (streamId: string) => {
+    setStreams((prev) => {
+      const target = prev.find((s) => s.id === streamId);
+      if (target && target.stream) {
+        target.stream.getTracks().forEach((track) => track.stop());
+      }
+      const filtered = prev.filter((s) => s.id !== streamId);
+      
+      // Post notification about disconnection
+      setMessages((m) => [
+        ...m,
+        {
+          id: 'sys_' + Math.random().toString(36).substring(2, 11),
+          sender: 'system',
+          text: `🔌 Disconnected screen feed: "${target?.label || 'Screen stream'}"`,
+          timestamp: Date.now(),
+          isNotification: true
+        }
+      ]);
+      return filtered;
+    });
   };
 
-  // Auto-bind video source
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch((e) => console.log('Video playing error:', e));
-    }
-  }, [stream]);
-
-  // Clean up on component unmount
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [stream]);
-
-  // Capture current frame from live capture
-  const takeScreenshot = () => {
-    if (!videoRef.current || !isCapturing) {
-      setError('Start capturing first before taking a screenshot.');
+  // Capture frame from a specific active screen stream
+  const captureFrameFromStream = (streamItem: ScreenStream) => {
+    const video = document.getElementById(`video-${streamItem.id}`) as HTMLVideoElement | null;
+    if (!video || video.readyState < 2) {
+      setError('Screen stream is not ready to capture frames. Please try again.');
       return;
     }
 
-    const video = videoRef.current;
-    const width = video.videoWidth || 1920;
-    const height = video.videoHeight || 1080;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
 
-    // Use offscreen canvas to capture native source resolution
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      setError('Could not initialize canvas rendering context.');
+      setError('Could not initialize 2D canvas context.');
       return;
     }
 
     try {
-      // Shutter visual and auditory cues
+      // Shutter visual and auditory feedback
       setFlash(true);
       playShutterSound();
       setTimeout(() => setFlash(false), 200);
 
-      // Draw active video frame onto the canvas
       ctx.drawImage(video, 0, 0, width, height);
       const dataUrl = canvas.toDataURL('image/png');
 
@@ -220,7 +283,7 @@ export default function App() {
         width,
         height,
         timestamp: Date.now(),
-        label: `Screenshot ${screenshots.length + 1}`,
+        label: `Capture from ${streamItem.label}`,
         format: 'png',
         adjustments: { ...DEFAULT_ADJUSTMENTS },
         filter: 'normal',
@@ -228,19 +291,164 @@ export default function App() {
 
       setScreenshots((prev) => [newItem, ...prev]);
       setActiveId(newItem.id);
-      
-      // Reset filter options
+
+      // Reset editor parameters to default
       setAdjustments({ ...DEFAULT_ADJUSTMENTS });
       setActiveFilter('normal');
     } catch (e: any) {
-      console.error('Frame extraction failed:', e);
-      setError('Failed to extract screen frame due to browser rendering policy.');
+      console.error('Frame capture failed:', e);
+      setError('Failed to capture screen frame due to browser rendering policies.');
+    }
+  };
+
+  // Extract base64 image representation from a live stream element
+  const getStreamFrameBase64 = (streamId: string): string | null => {
+    const video = document.getElementById(`video-${streamId}`) as HTMLVideoElement | null;
+    if (!video || video.readyState < 2) return null;
+
+    const canvas = document.createElement('canvas');
+    // Scale down slightly to ensure rapid API communication
+    canvas.width = 1024;
+    canvas.height = 576;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.7);
+    } catch (e) {
+      console.error('Failed to capture stream frame for AI:', e);
+      return null;
+    }
+  };
+
+  // Run a vision context analysis to post an alert notification
+  const handleContextScan = async () => {
+    const activeStreams = streams.filter((s) => s.isActive && s.stream);
+    if (activeStreams.length === 0) {
+      setError('Please add at least one active Screen Stream to perform a context scan.');
+      return;
+    }
+
+    setIsScanning(true);
+    try {
+      const screensPayload = activeStreams.map((s) => {
+        const base64 = getStreamFrameBase64(s.id);
+        return {
+          id: s.id,
+          label: s.label,
+          base64: base64
+        };
+      }).filter((s) => s.base64 !== null);
+
+      const response = await fetch('/api/scan-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screens: screensPayload })
+      });
+
+      if (!response.ok) {
+        throw new Error('Server returned an error while scanning context.');
+      }
+
+      const data = await response.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'scan_' + Math.random().toString(36).substring(2, 11),
+          sender: 'system',
+          text: data.notification || 'Screens scanned. No updates found.',
+          timestamp: Date.now(),
+          isNotification: true,
+          analyzedScreens: activeStreams.map((s) => s.label)
+        }
+      ]);
+    } catch (err: any) {
+      console.error(err);
+      setError('Context Scan failed: ' + err.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  // Submit chat prompt to Gemini with current screen context
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputValue.trim() && !includeScreens) return;
+
+    const queryText = inputValue.trim();
+    setInputValue('');
+
+    const activeStreams = streams.filter((s) => s.isActive && s.stream);
+    const selectedScreenLabels = includeScreens ? activeStreams.map((s) => s.label) : [];
+
+    const userMessage: ChatMessage = {
+      id: 'msg_' + Math.random().toString(36).substring(2, 11),
+      sender: 'user',
+      text: queryText || 'Please analyze my screen feeds right now.',
+      timestamp: Date.now(),
+      analyzedScreens: selectedScreenLabels
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsSending(true);
+
+    try {
+      const screensPayload = includeScreens ? activeStreams.map((s) => {
+        const base64 = getStreamFrameBase64(s.id);
+        return {
+          id: s.id,
+          label: s.label,
+          base64: base64
+        };
+      }).filter((s) => s.base64 !== null) : [];
+
+      const response = await fetch('/api/chat-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: queryText,
+          history: messages.slice(-10), // Keep a light context window
+          screens: screensPayload
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Server returned error response.');
+      }
+
+      const data = await response.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'msg_' + Math.random().toString(36).substring(2, 11),
+          sender: 'assistant',
+          text: data.text,
+          timestamp: Date.now()
+        }
+      ]);
+
+    } catch (err: any) {
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'err_' + Math.random().toString(36).substring(2, 11),
+          sender: 'system',
+          text: `⚠️ **API Error:** Failed to communicate with the Screen Stream AI server. Make sure your \`GEMINI_API_KEY\` is configured in **Settings > Secrets**.`,
+          timestamp: Date.now()
+        }
+      ]);
+    } finally {
+      setIsSending(false);
     }
   };
 
   const activeItem = screenshots.find((s) => s.id === activeId);
 
-  // Sync adjustments if user switches active screenshot
+  // Sync editor adjustments if active screenshot shifts
   useEffect(() => {
     if (activeItem) {
       setAdjustments(activeItem.adjustments);
@@ -248,7 +456,7 @@ export default function App() {
     }
   }, [activeId]);
 
-  // Update current item with changes
+  // Update active screenshot settings
   const updateActiveAdjustments = (newAdjusts: Partial<ImageAdjustments>) => {
     if (!activeId) return;
     setAdjustments((prev) => {
@@ -272,14 +480,13 @@ export default function App() {
     );
   };
 
-  // Helper to construct CSS filter string for preview rendering
+  // Help calculate browser filter CSS rules
   const getFilterCSSString = (adj: ImageAdjustments, filter: PresetFilter) => {
     let filterString = `brightness(${adj.brightness}%) contrast(${adj.contrast}%) saturate(${adj.saturation}%) blur(${adj.blur}px)`;
     if (adj.grayscale) filterString += ' grayscale(100%)';
     if (adj.sepia) filterString += ' sepia(100%)';
     if (adj.invert) filterString += ' invert(100%)';
 
-    // Apply quick filters
     switch (filter) {
       case 'vintage':
         filterString += ' sepia(60%) contrast(120%) brightness(95%)';
@@ -303,7 +510,6 @@ export default function App() {
     return filterString;
   };
 
-  // Bakes adjustments onto a canvas and returns the processed canvas
   const getProcessedCanvas = async (): Promise<HTMLCanvasElement | null> => {
     if (!activeItem) return null;
 
@@ -316,7 +522,6 @@ export default function App() {
         const ctx = canvas.getContext('2d');
 
         if (ctx) {
-          // Modern browser canvas filters
           ctx.filter = getFilterCSSString(adjustments, activeFilter);
           ctx.drawImage(img, 0, 0);
           resolve(canvas);
@@ -328,7 +533,6 @@ export default function App() {
     });
   };
 
-  // Copy PNG image to clipboard
   const handleCopyToClipboard = async () => {
     if (!activeItem) return;
     try {
@@ -342,19 +546,17 @@ export default function App() {
           await navigator.clipboard.write([item]);
           setCopyStatus(true);
           setTimeout(() => setCopyStatus(false), 2000);
-        } catch (clipboardErr) {
-          console.error('Clipboard write error:', clipboardErr);
-          // Fallback if browser doesn't support writing blobs to clipboard
-          setError('Clipboard API rejected blob writing. Try right-clicking on the image and copying.');
+        } catch (err) {
+          console.error(err);
+          setError('Clipboard rejected format. Try right-clicking on the preview and copying.');
         }
       }, 'image/png');
     } catch (err) {
-      console.error('Failed to copy processed image:', err);
-      setError('Could not prepare screenshot for clipboard copy.');
+      console.error(err);
+      setError('Could not prepare screenshot to copy.');
     }
   };
 
-  // Download screenshot file
   const handleDownload = async () => {
     if (!activeItem) return;
     try {
@@ -362,22 +564,20 @@ export default function App() {
       if (!canvas) return;
 
       const mimeType = exportFormat === 'png' ? 'image/png' : 'image/jpeg';
-      const fileExtension = exportFormat === 'png' ? 'png' : 'jpg';
-      const quality = exportFormat === 'jpeg' ? 0.92 : undefined;
+      const fileExt = exportFormat === 'png' ? 'png' : 'jpg';
+      const qual = exportFormat === 'jpeg' ? 0.92 : undefined;
 
-      const dataUrl = canvas.toDataURL(mimeType, quality);
+      const dataUrl = canvas.toDataURL(mimeType, qual);
       const link = document.createElement('a');
-      const cleanLabel = activeItem.label.toLowerCase().replace(/\s+/g, '-');
-      link.download = `${cleanLabel}.${fileExtension}`;
+      link.download = `${activeItem.label.toLowerCase().replace(/\s+/g, '-')}.${fileExt}`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
-      console.error('Download failed:', err);
-      setError('Could not download image. Please try again.');
+      console.error(err);
+      setError('Could not complete download.');
     }
   };
 
-  // Web Share image to other apps (via OS Share Sheet)
   const handleShare = async () => {
     if (!activeItem) return;
     try {
@@ -386,32 +586,29 @@ export default function App() {
 
       canvas.toBlob(async (blob) => {
         if (!blob) return;
-        
         const file = new File([blob], `${activeItem.label.toLowerCase().replace(/\s+/g, '-')}.png`, {
-          type: 'image/png',
+          type: 'image/png'
         });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
             title: activeItem.label,
-            text: 'Here is a screenshot captured from Screenshare Workspace.',
+            text: 'Screenshot from Screen Stream Workspace.'
           });
           setShareStatus(true);
           setTimeout(() => setShareStatus(false), 2000);
         } else {
-          // Clipboard is the best alternative
           handleCopyToClipboard();
-          setError('Your browser does not support native file sharing. Copying screenshot to clipboard instead!');
+          setError('Browser share not supported. Image has been copied to your clipboard!');
         }
       }, 'image/png');
     } catch (err) {
-      console.error('Sharing failed:', err);
-      setError('Could not initiate system share sheet.');
+      console.error(err);
+      setError('Could not activate system share.');
     }
   };
 
-  // Delete current screenshot
   const deleteScreenshot = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setScreenshots((list) => {
@@ -423,9 +620,70 @@ export default function App() {
     });
   };
 
+  // Custom visual message formatter to display markdown, lists, and code blocks beautifully
+  const renderMessageContent = (text: string) => {
+    const parts = text.split(/(```[\s\S]*?```)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('```')) {
+        const match = part.match(/```(\w*)\n([\s\S]*?)```/);
+        const lang = match ? match[1] : '';
+        const code = match ? match[2] : part.slice(3, -3);
+
+        return (
+          <div key={index} className="my-3 font-mono text-[11px] bg-slate-950 border border-slate-900 rounded-lg overflow-hidden text-emerald-400 max-w-full">
+            <div className="flex items-center justify-between bg-slate-900/60 px-3 py-1.5 border-b border-slate-950 text-[9px] text-slate-500 font-sans">
+              <span className="font-semibold uppercase tracking-wider">{lang || 'Code'}</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(code);
+                }}
+                className="hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Copy className="h-3 w-3" /> Copy
+              </button>
+            </div>
+            <pre className="p-3.5 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed select-all">{code.trim()}</pre>
+          </div>
+        );
+      }
+
+      const lines = part.split('\n');
+      return (
+        <div key={index} className="space-y-1.5 leading-relaxed text-slate-300">
+          {lines.map((line, lineIdx) => {
+            if (line.startsWith('### ')) {
+              return <h4 key={lineIdx} className="text-xs font-bold text-slate-200 mt-2.5 mb-1">{line.replace('### ', '')}</h4>;
+            }
+            if (line.startsWith('## ')) {
+              return <h3 key={lineIdx} className="text-sm font-bold text-white mt-3 mb-1.5 border-b border-slate-900 pb-1">{line.replace('## ', '')}</h3>;
+            }
+            if (line.startsWith('- ') || line.startsWith('* ')) {
+              return (
+                <li key={lineIdx} className="ml-4 list-disc text-xs text-slate-300">
+                  {renderInlineMarkdown(line.slice(2))}
+                </li>
+              );
+            }
+            return <p key={lineIdx} className="text-xs text-slate-300">{renderInlineMarkdown(line)}</p>;
+          })}
+        </div>
+      );
+    });
+  };
+
+  const renderInlineMarkdown = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={idx} className="font-bold text-white">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-blue-500/30 selection:text-blue-200" id="app-viewport">
-      {/* Visual camera flash animation overlay */}
+      {/* visual camera flash */}
       <AnimatePresence>
         {flash && (
           <motion.div
@@ -442,32 +700,30 @@ export default function App() {
       {/* Main navigation header */}
       <header className="flex h-16 items-center justify-between border-b border-slate-900 bg-slate-950/80 backdrop-blur-xl px-6 sticky top-0 z-40" id="main-header">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/20" id="header-logo-container">
-            <Camera className="h-4.5 w-4.5" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/20">
+            <Monitor className="h-4.5 w-4.5" />
           </div>
           <div>
             <h1 className="text-sm font-extrabold tracking-tight text-white flex items-center gap-2">
-              Screenshot Pro <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[9px] font-bold text-blue-400 font-mono">WORKSPACE</span>
+              Screen Stream <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[9px] font-bold text-blue-400 font-mono">AI WORKSPACE</span>
             </h1>
             <p className="text-[10px] text-slate-500 font-mono">
-              Captures high-resolution frames directly in browser
+              Live context-aware screen analyzer & developer copilot
             </p>
           </div>
         </div>
 
+        {/* Global actions and metrics */}
         <div className="flex items-center gap-4">
-          {/* Global info metrics */}
-          <div className="hidden md:flex items-center gap-6 text-[11px] font-mono text-slate-400">
-            <div className="flex items-center gap-1.5">
-              <ImageIcon className="h-3.5 w-3.5 text-slate-500" />
-              Captured Session Images: <span className="font-bold text-slate-200">{screenshots.length}</span>
+          <div className="hidden md:flex items-center gap-4 text-[11px] font-mono text-slate-400 border-r border-slate-900 pr-4">
+            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+              <Activity className="h-3.5 w-3.5 text-blue-400" />
+              Streams: <span className="font-bold text-slate-200">{streams.length}/10</span>
             </div>
-            {isCapturing && (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-slate-300 font-medium">Capturing Screen feed...</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+              <ImageIcon className="h-3.5 w-3.5 text-indigo-400" />
+              Gallery: <span className="font-bold text-slate-200">{screenshots.length}</span>
+            </div>
           </div>
 
           {isInIframe && (
@@ -498,116 +754,317 @@ export default function App() {
         </div>
       )}
 
-      {/* Two-Column split workspace */}
+      {/* Main split three-pane workspace */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" id="main-workspace-frame">
-        {/* Left column: Live camera viewport & session historical roll */}
-        <div className="flex-1 flex flex-col p-4 lg:p-6 space-y-6 overflow-y-auto" id="left-workspace-column">
-          {/* Live capture source section */}
-          <div className="rounded-2xl border border-slate-900 bg-slate-900/40 p-5 space-y-4 shadow-xl" id="camera-feed-card">
-            <div className="flex items-center justify-between" id="feed-header">
-              <div className="space-y-0.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                  <Monitor className="h-3.5 w-3.5 text-blue-400" /> Screen & Window Capture source
-                </h3>
+        
+        {/* Panel 1: Screen Stream Wall (Grid) */}
+        <div className="flex-1 flex flex-col p-4 border-r border-slate-900 bg-slate-950 overflow-y-auto" id="left-streams-column">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-0.5">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+                <Monitor className="h-4 w-4 text-blue-400" /> Screen Stream Grid ({streams.length})
+              </h3>
+              <p className="text-[10px] text-slate-500">
+                Each stream connects to an individual tab or window
+              </p>
+            </div>
+            
+            <button
+              onClick={addScreenStream}
+              disabled={streams.length >= 10}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+              id="btn-add-stream"
+            >
+              <Plus className="h-4 w-4" /> Add Screen Stream
+            </button>
+          </div>
+
+          {/* Screen Streams Grid Layout */}
+          {streams.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl border border-dashed border-slate-900 bg-slate-900/10 my-4 max-w-2xl mx-auto space-y-4" id="streams-empty-state">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-500">
+                <Monitor className="h-7 w-7" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">No Screens Connected</h4>
                 <p className="text-[11px] text-slate-500">
-                  Pick a target app or screen tab to freeze frames
+                  Select windows, browser tabs, or whole monitors to build your real-time video streaming setup. You can combine up to 10 active streams in parallel!
                 </p>
               </div>
 
-              {isCapturing ? (
-                <button
-                  onClick={stopCapture}
-                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  id="btn-disconnect-feed"
-                >
-                  Disconnect Source
-                </button>
+              {isInIframe ? (
+                <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3.5 max-w-md text-left">
+                  <p className="text-[10px] text-blue-300 leading-normal flex items-start gap-1.5 font-mono">
+                    <Info className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
+                    <span>
+                      <strong>Chrome Policy Notice:</strong> Browser security restricts screen-sharing inside embedded iframes. Click **"Launch in New Tab"** to capture your screen streams seamlessly.
+                    </span>
+                  </p>
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-white py-2 px-4 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Maximize2 className="h-3 w-3" /> Launch in New Tab
+                  </a>
+                </div>
               ) : (
                 <button
-                  onClick={startCapture}
-                  className="rounded-lg bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-600/25 transition-all flex items-center gap-1.5 cursor-pointer"
-                  id="btn-connect-feed"
+                  onClick={addScreenStream}
+                  className="rounded-lg bg-slate-900 border border-slate-800 px-4 py-2 text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                 >
-                  Select Screen / Tab
+                  Connect Screen Feed
                 </button>
               )}
             </div>
-
-            {/* Viewport viewport screen */}
-            <div className="relative aspect-video rounded-xl border border-slate-900 bg-slate-950 overflow-hidden flex items-center justify-center group shadow-inner" id="live-camera-view-window">
-              {isCapturing ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-contain"
-                    id="live-screencapture-video"
-                  />
-                  {/* Dynamic hovering capture HUD overlay */}
-                  <div className="absolute top-3 left-3 bg-slate-950/80 border border-slate-800/80 backdrop-blur px-2.5 py-1 rounded-md text-[10px] font-mono text-slate-300 flex items-center gap-1.5 select-none pointer-events-none">
-                    <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                    <span>FEED CONNECTED</span>
+          ) : (
+            <div className={`grid gap-4 mt-2 ${
+              streams.length === 1 ? 'grid-cols-1' :
+              streams.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+              streams.length === 3 || streams.length === 4 ? 'grid-cols-2' :
+              'grid-cols-2 xl:grid-cols-3'
+            }`} id="streams-grids-container">
+              {streams.map((item) => (
+                <div key={item.id} className="rounded-xl border border-slate-900 bg-slate-900/30 overflow-hidden relative group shadow-lg flex flex-col">
+                  {/* Card Header controls */}
+                  <div className="bg-slate-950/80 px-3 py-2 border-b border-slate-900 flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={item.label}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStreams(list => list.map(st => st.id === item.id ? { ...st, label: val } : st));
+                      }}
+                      className="bg-transparent border-0 font-mono text-[11px] font-bold text-slate-300 focus:outline-none focus:text-white truncate max-w-[150px] focus:underline"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[9px] font-mono font-semibold text-slate-500 uppercase tracking-widest">LIVE</span>
+                    </div>
                   </div>
 
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center justify-center opacity-90 hover:opacity-100 transition-opacity z-10">
+                  {/* Video Viewport Container */}
+                  <div className="aspect-video bg-slate-950 relative overflow-hidden flex items-center justify-center">
+                    <video
+                      id={`video-${item.id}`}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-contain"
+                    />
+
+                    {/* Hover tools layer */}
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => captureFrameFromStream(item)}
+                        className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-xl transition-transform active:scale-90 cursor-pointer"
+                        title="Take Screenshot and edit in Workbench"
+                      >
+                        <Camera className="h-4.5 w-4.5" />
+                      </button>
+                      <button
+                        onClick={() => disconnectStream(item.id)}
+                        className="p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl transition-transform active:scale-90 cursor-pointer"
+                        title="Disconnect Feed"
+                      >
+                        <Trash2 className="h-4.5 w-4.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card bottom details */}
+                  <div className="p-2 bg-slate-950/50 flex items-center justify-between text-[9px] font-mono text-slate-500">
+                    <span>Source: DisplayMedia API</span>
                     <button
-                      onClick={takeScreenshot}
-                      className="flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 font-bold text-sm shadow-xl shadow-blue-600/40 ring-4 ring-blue-600/10 cursor-pointer transition-transform active:scale-95"
-                      id="btn-take-shutter-snapshot"
+                      onClick={() => captureFrameFromStream(item)}
+                      className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
                     >
-                      <Camera className="h-4.5 w-4.5" /> Snap Screenshot
+                      <Camera className="h-3 w-3" /> Snap Frame
                     </button>
                   </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center text-center p-8 space-y-3 max-w-sm" id="empty-capture-source-fallback">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 border border-slate-800 text-slate-500">
-                    <Monitor className="h-6 w-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">No capture feed selected</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Click the select button to pick any window or browser tab to start snapping instant images.
-                    </p>
-                  </div>
-                  <button
-                    onClick={startCapture}
-                    className="rounded-lg bg-slate-900 border border-slate-800 px-4 py-2 text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer"
-                    id="btn-connect-feed-fallback"
-                  >
-                    Select Source
-                  </button>
-
-                  {isInIframe && (
-                    <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3.5 max-w-xs mt-3 text-left">
-                      <p className="text-[10px] text-blue-300 leading-normal flex items-start gap-1.5 font-mono">
-                        <Info className="h-3.5 w-3.5 shrink-0 text-blue-400 mt-0.5" />
-                        <span>
-                          <strong>Note:</strong> Chrome blocks screen capture inside iframe previews. Click below to launch in a full tab where screen capture is fully permitted.
-                        </span>
-                      </p>
-                      <a
-                        href={window.location.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2.5 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-white py-1.5 px-3 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Maximize2 className="h-3 w-3" /> Launch in New Tab
-                      </a>
-                    </div>
-                  )}
                 </div>
-              )}
+              ))}
             </div>
+          )}
+        </div>
+
+        {/* Panel 2: Live AI Developer Chat (Middle) */}
+        <div className="w-full lg:w-[420px] border-t lg:border-t-0 lg:border-r border-slate-900 bg-slate-950 flex flex-col shrink-0 overflow-hidden" id="middle-chat-column">
+          {/* Chat Header and active scans */}
+          <div className="p-4 border-b border-slate-900 bg-slate-950 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-blue-400" /> Screen Stream AI
+              </h3>
+              <p className="text-[10px] text-slate-500">
+                Ask anything about your stream context
+              </p>
+            </div>
+
+            <button
+              onClick={handleContextScan}
+              disabled={isScanning || streams.length === 0}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-[10px] font-bold text-slate-300 hover:text-white px-2.5 py-1.5 transition-all disabled:opacity-50 cursor-pointer font-mono"
+            >
+              <Bell className={`h-3 w-3 text-yellow-500 ${isScanning ? 'animate-bounce' : ''}`} />
+              {isScanning ? 'Scanning...' : 'Scan Context'}
+            </button>
           </div>
 
-          {/* Historical snapped screenshots roll */}
-          <div className="space-y-3" id="screenshot-roll-card">
+          {/* Chat log viewport */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4" id="chat-messages-container">
+            {messages.map((msg) => {
+              if (msg.sender === 'system') {
+                return (
+                  <div
+                    key={msg.id}
+                    className={`rounded-xl p-3.5 text-xs ${
+                      msg.isNotification
+                        ? 'bg-blue-500/5 border border-blue-500/10 text-slate-300 relative overflow-hidden'
+                        : 'bg-slate-900/60 border border-slate-900 text-slate-400'
+                    }`}
+                  >
+                    {msg.isNotification && (
+                      <div className="absolute top-2.5 right-2.5 flex h-4 w-4 items-center justify-center text-blue-400">
+                        <Bell className="h-3 w-3 animate-pulse" />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      {msg.isNotification && (
+                        <span className="text-[9px] font-bold font-mono text-blue-400 uppercase tracking-widest block mb-1">
+                          System Notification
+                        </span>
+                      )}
+                      <div>{renderMessageContent(msg.text)}</div>
+                      {msg.analyzedScreens && (
+                        <div className="mt-2.5 flex flex-wrap gap-1 items-center">
+                          <span className="text-[8px] font-mono text-slate-500">Scanned Sources:</span>
+                          {msg.analyzedScreens.map((lbl, idx) => (
+                            <span key={idx} className="bg-slate-950 border border-slate-800 px-1 py-0.2 rounded text-[8px] font-mono text-slate-400">
+                              {lbl}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              const isUser = msg.sender === 'user';
+              return (
+                <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[90%] rounded-xl px-4 py-3 space-y-1 text-xs shadow-md ${
+                    isUser
+                      ? 'bg-blue-600 text-white rounded-tr-none'
+                      : 'bg-slate-900/80 border border-slate-800 text-slate-100 rounded-tl-none'
+                  }`}>
+                    {/* Header bar indicating parsed visual context */}
+                    {!isUser && (
+                      <div className="flex items-center gap-1 text-[9px] font-extrabold tracking-widest text-blue-400 uppercase font-mono mb-1">
+                        <Sparkles className="h-3 w-3" /> Screen Stream AI
+                      </div>
+                    )}
+
+                    {/* Main content body */}
+                    <div>
+                      {isUser ? <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p> : renderMessageContent(msg.text)}
+                    </div>
+
+                    {/* Scanned streams footer metadata */}
+                    {isUser && msg.analyzedScreens && msg.analyzedScreens.length > 0 && (
+                      <div className="mt-2.5 pt-1.5 border-t border-blue-500/25 flex flex-wrap gap-1 items-center">
+                        <span className="text-[8px] font-mono text-blue-200">📎 Sent with screen context:</span>
+                        {msg.analyzedScreens.map((lbl, idx) => (
+                          <span key={idx} className="bg-blue-700/60 border border-blue-500/40 px-1 rounded text-[8px] font-mono text-white">
+                            {lbl}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {isSending && (
+              <div className="flex justify-start">
+                <div className="bg-slate-900/60 border border-slate-800 text-slate-400 rounded-xl rounded-tl-none px-4 py-3 text-xs space-y-2 max-w-[90%]">
+                  <div className="flex items-center gap-1.5 text-[9px] font-bold font-mono text-blue-400 uppercase tracking-wider">
+                    <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                    Analyzing your screens...
+                  </div>
+                  <div className="flex gap-1 items-center justify-center">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-100" />
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-200" />
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-300" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat action input area */}
+          <div className="p-4 border-t border-slate-900 bg-slate-950/90 backdrop-blur" id="chat-input-container">
+            <form onSubmit={handleSendMessage} className="space-y-3">
+              <div className="relative">
+                <textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Ask Screen Stream AI... (e.g., 'What code structure is displayed? help me build a landing page for it!')"
+                  className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-3 pr-11 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 h-20 resize-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={isSending || (!inputValue.trim() && !includeScreens)}
+                  className="absolute bottom-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:bg-slate-800 disabled:text-slate-600 cursor-pointer"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Advanced chat settings toggles */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-[10px] font-semibold font-mono text-slate-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeScreens}
+                    onChange={(e) => setIncludeScreens(e.target.checked)}
+                    className="rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-blue-500 h-3 w-3 accent-blue-600"
+                  />
+                  <span>Include Screen context ({streams.filter((s) => s.isActive && s.stream).length} active)</span>
+                </label>
+
+                {streams.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleContextScan}
+                    className="text-[9px] text-blue-400 hover:text-blue-300 font-mono font-bold"
+                  >
+                    Quick context alert
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {/* Panel 3: Snapped Gallery & Image Workbench (Right) */}
+        <div className="w-full lg:w-[380px] border-t lg:border-t-0 bg-slate-950 flex flex-col shrink-0 overflow-y-auto" id="right-gallery-column">
+          
+          {/* Section: Snapped Roll */}
+          <div className="p-4 border-b border-slate-900 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Snapped Screen Images ({screenshots.length})
+                <Clock className="h-3.5 w-3.5" /> Snapped Photos ({screenshots.length})
               </h3>
               {screenshots.length > 0 && (
                 <button
@@ -616,7 +1073,6 @@ export default function App() {
                     setActiveId(null);
                   }}
                   className="text-[10px] font-medium text-slate-500 hover:text-red-400 font-mono transition-colors cursor-pointer"
-                  id="btn-clear-session-gallery"
                 >
                   Clear all
                 </button>
@@ -624,25 +1080,24 @@ export default function App() {
             </div>
 
             {screenshots.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-900 py-10 text-center text-slate-600 text-xs font-mono" id="empty-session-roll-fallback">
-                No screenshots snapped in this session.
+              <div className="rounded-xl border border-dashed border-slate-900 py-6 text-center text-slate-600 text-[10px] font-mono">
+                No screenshots captured. Hover over any stream card to capture.
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4" id="historical-cards-grid">
+              <div className="flex gap-2 overflow-x-auto pb-1" id="gallery-scroller">
                 {screenshots.map((item) => {
                   const isActive = item.id === activeId;
                   return (
                     <div
                       key={item.id}
                       onClick={() => setActiveId(item.id)}
-                      className={`relative rounded-xl border p-2 bg-slate-900/30 overflow-hidden cursor-pointer transition-all ${
+                      className={`relative shrink-0 w-24 rounded-lg border p-1.5 bg-slate-900/30 overflow-hidden cursor-pointer transition-all ${
                         isActive
                           ? 'border-blue-500 ring-1 ring-blue-500/20'
                           : 'border-slate-900 hover:border-slate-800'
                       }`}
-                      id={`snap-card-${item.id}`}
                     >
-                      <div className="aspect-video bg-slate-950 rounded-lg overflow-hidden relative">
+                      <div className="aspect-video bg-slate-950 rounded overflow-hidden relative">
                         <img
                           src={item.originalUrl}
                           alt={item.label}
@@ -651,62 +1106,49 @@ export default function App() {
                         />
                         <button
                           onClick={(e) => deleteScreenshot(item.id, e)}
-                          className="absolute top-1 right-1 p-1 rounded bg-slate-950/80 border border-slate-800 hover:bg-red-500/10 hover:border-red-500/30 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
-                          title="Delete screenshot"
-                          id={`btn-delete-${item.id}`}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/80 border border-slate-800 hover:bg-red-500/10 hover:border-red-500/30 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-2.5 w-2.5" />
                         </button>
                       </div>
-
-                      <div className="mt-2 space-y-0.5">
-                        <p className="text-[11px] font-semibold text-slate-200 truncate font-sans">
-                          {item.label}
-                        </p>
-                        <p className="text-[9px] text-slate-500 font-mono">
-                          {item.width}x{item.height}
-                        </p>
-                      </div>
+                      <p className="mt-1 text-[9px] font-semibold text-slate-300 truncate">
+                        {item.label}
+                      </p>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
-        </div>
 
-        {/* Right column: Interactive Workbench & Editor controls */}
-        <div className="w-full lg:w-[400px] border-t lg:border-t-0 lg:border-l border-slate-900 bg-slate-950 flex flex-col shrink-0 overflow-y-auto" id="right-workspace-column">
+          {/* Section: Workbench Details */}
           {activeItem ? (
-            <div className="p-5 space-y-6" id="editor-active-container">
-              {/* Image Preview & Properties */}
-              <div className="space-y-3" id="active-image-header">
+            <div className="p-4 space-y-5" id="workbench-active-container">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
                     Image Workbench
-                  </h3>
-                  <span className="text-[10px] font-mono text-slate-500 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
                     {activeItem.width}x{activeItem.height} px
                   </span>
                 </div>
 
-                {/* Main Processed Image Preview */}
-                <div className="relative aspect-video rounded-xl border border-slate-900 bg-slate-950 overflow-hidden group shadow-md" id="workbench-editor-preview">
+                {/* Main image container */}
+                <div className="relative aspect-video rounded-xl border border-slate-900 bg-slate-950 overflow-hidden group shadow-md">
                   <img
                     src={activeItem.originalUrl}
                     alt={activeItem.label}
                     className="w-full h-full object-contain"
                     style={{ filter: getFilterCSSString(adjustments, activeFilter) }}
-                    id="workbench-processed-img"
                   />
-                  <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="rounded bg-slate-950/80 border border-slate-800/80 px-2 py-1 text-[9px] font-mono text-slate-300 backdrop-blur">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="rounded bg-slate-950/80 border border-slate-800/80 px-2 py-1 text-[8px] font-mono text-slate-300">
                       Baking Live Filters
                     </span>
                   </div>
                 </div>
 
-                {/* Editable Image Label */}
                 <input
                   type="text"
                   value={activeItem.label}
@@ -718,19 +1160,19 @@ export default function App() {
                       )
                     );
                   }}
-                  className="w-full bg-transparent border-b border-slate-900 hover:border-slate-800 focus:border-blue-500 focus:outline-none text-sm font-semibold text-slate-100 py-1"
-                  placeholder="Screenshot Name"
+                  className="w-full bg-transparent border-b border-slate-900 hover:border-slate-800 focus:border-blue-500 focus:outline-none text-xs font-semibold text-slate-100 py-1"
+                  placeholder="Screenshot Label"
                 />
               </div>
 
-              {/* Action output buttons - Essential to "share to another app" */}
-              <div className="space-y-2.5" id="workbench-share-controls">
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
-                  <span>Workspace Export Actions</span>
-                  <div className="flex items-center gap-1.5" id="export-format-pills">
+              {/* Export Panel */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
+                  <span>Export Actions</span>
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => setExportFormat('png')}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
                         exportFormat === 'png' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-500'
                       }`}
                     >
@@ -738,7 +1180,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setExportFormat('jpeg')}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
                         exportFormat === 'jpeg' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-500'
                       }`}
                     >
@@ -747,99 +1189,70 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-2" id="action-buttons-grid">
-                  {/* Copy Button (Holy grail for Discord/Figma pasting) */}
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleCopyToClipboard}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2.5 text-xs font-bold text-slate-100 hover:text-white transition-all cursor-pointer"
-                    id="btn-copy-clipboard"
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
                   >
-                    {copyStatus ? (
-                      <>
-                        <Check className="h-4 w-4 text-emerald-400" /> Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 text-blue-400" /> Copy Image
-                      </>
-                    )}
+                    {copyStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-blue-400" />}
+                    <span>{copyStatus ? 'Copied' : 'Copy'}</span>
                   </button>
-
-                  {/* Share sheet button */}
                   <button
                     onClick={handleShare}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2.5 text-xs font-bold text-slate-100 hover:text-white transition-all cursor-pointer"
-                    id="btn-share-os-sheet"
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 py-2 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
                   >
-                    {shareStatus ? (
-                      <>
-                        <Check className="h-4 w-4 text-emerald-400" /> Shared!
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="h-4 w-4 text-indigo-400" /> OS Share
-                      </>
-                    )}
+                    {shareStatus ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Share2 className="h-3.5 w-3.5 text-indigo-400" />}
+                    <span>{shareStatus ? 'Shared' : 'OS Share'}</span>
                   </button>
                 </div>
 
-                {/* Big download button */}
                 <button
                   onClick={handleDownload}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-xs font-bold text-white shadow-lg shadow-blue-600/10 hover:from-blue-500 hover:to-indigo-500 cursor-pointer transition-transform active:scale-99"
-                  id="btn-download-image"
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/10 cursor-pointer"
                 >
-                  <Download className="h-4 w-4" /> Download Processed Snapshot
+                  <Download className="h-3.5 w-3.5" /> Download Snapshot
                 </button>
               </div>
 
-              {/* Divider */}
-              <div className="h-[1px] bg-slate-900" />
-
-              {/* Adjusters and filters workspace panels */}
-              <div className="space-y-5" id="workbench-filter-options">
-                {/* Preset filter options */}
-                <div className="space-y-2">
+              {/* Filters list */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
                   <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
-                    Preset Mood Filters
+                    Mood Filters
                   </span>
-                  <div className="grid grid-cols-4 gap-2" id="preset-filters-grid">
+                  <div className="grid grid-cols-4 gap-1.5">
                     {(['normal', 'vintage', 'cool', 'warm', 'monochrome', 'high-contrast', 'faded'] as PresetFilter[]).map((f) => (
                       <button
                         key={f}
                         onClick={() => updateActiveFilter(f)}
-                        className={`py-1.5 text-[10px] font-bold rounded-lg border transition-all truncate cursor-pointer ${
+                        className={`py-1 text-[9px] font-bold rounded border transition-all truncate cursor-pointer ${
                           activeFilter === f
                             ? 'border-blue-500 bg-blue-500/10 text-slate-100'
-                            : 'border-slate-900 bg-slate-900/20 text-slate-500 hover:border-slate-800 hover:text-slate-300'
+                            : 'border-slate-900 bg-slate-900/20 text-slate-500 hover:border-slate-800'
                         }`}
-                        id={`filter-pill-${f}`}
                       >
-                        {f.replace('-', ' ')}
+                        {f}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Adjustments sliders */}
-                <div className="space-y-4" id="workbench-sliders">
+                {/* Adjustments */}
+                <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                      <Sliders className="h-3 w-3" /> Image Adjustments
+                      <Sliders className="h-3 w-3" /> Sliders
                     </span>
                     <button
                       onClick={() => updateActiveAdjustments(DEFAULT_ADJUSTMENTS)}
-                      className="text-[10px] text-slate-500 hover:text-slate-300 font-mono cursor-pointer"
-                      id="btn-reset-sliders"
+                      className="text-[9px] text-slate-500 hover:text-slate-300 font-mono cursor-pointer"
                     >
-                      Reset adjustments
+                      Reset
                     </button>
                   </div>
 
-                  {/* Brightness */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400">
                       <span>Brightness</span>
                       <span>{adjustments.brightness}%</span>
                     </div>
@@ -849,13 +1262,12 @@ export default function App() {
                       max="150"
                       value={adjustments.brightness}
                       onChange={(e) => updateActiveAdjustments({ brightness: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg appearance-none"
+                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
                     />
                   </div>
 
-                  {/* Contrast */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400">
                       <span>Contrast</span>
                       <span>{adjustments.contrast}%</span>
                     </div>
@@ -865,13 +1277,12 @@ export default function App() {
                       max="150"
                       value={adjustments.contrast}
                       onChange={(e) => updateActiveAdjustments({ contrast: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg appearance-none"
+                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
                     />
                   </div>
 
-                  {/* Saturation */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400">
                       <span>Saturation</span>
                       <span>{adjustments.saturation}%</span>
                     </div>
@@ -881,13 +1292,12 @@ export default function App() {
                       max="200"
                       value={adjustments.saturation}
                       onChange={(e) => updateActiveAdjustments({ saturation: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg appearance-none"
+                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
                     />
                   </div>
 
-                  {/* Blur */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400">
                       <span>Blur</span>
                       <span>{adjustments.blur}px</span>
                     </div>
@@ -897,43 +1307,31 @@ export default function App() {
                       max="10"
                       value={adjustments.blur}
                       onChange={(e) => updateActiveAdjustments({ blur: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg appearance-none"
+                      className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-900 rounded appearance-none"
                     />
                   </div>
 
-                  {/* Checkboxes parameters */}
-                  <div className="grid grid-cols-3 gap-2 pt-2" id="workbench-checkboxes">
-                    {/* Grayscale */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
                     <button
                       onClick={() => updateActiveAdjustments({ grayscale: !adjustments.grayscale })}
-                      className={`py-2 px-1.5 text-[10px] font-semibold rounded-lg border transition-all text-center cursor-pointer ${
-                        adjustments.grayscale
-                          ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                          : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                      className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
+                        adjustments.grayscale ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
                       }`}
                     >
                       Grayscale
                     </button>
-
-                    {/* Sepia */}
                     <button
                       onClick={() => updateActiveAdjustments({ sepia: !adjustments.sepia })}
-                      className={`py-2 px-1.5 text-[10px] font-semibold rounded-lg border transition-all text-center cursor-pointer ${
-                        adjustments.sepia
-                          ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                          : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                      className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
+                        adjustments.sepia ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
                       }`}
                     >
-                      Sepia Tone
+                      Sepia
                     </button>
-
-                    {/* Invert */}
                     <button
                       onClick={() => updateActiveAdjustments({ invert: !adjustments.invert })}
-                      className={`py-2 px-1.5 text-[10px] font-semibold rounded-lg border transition-all text-center cursor-pointer ${
-                        adjustments.invert
-                          ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                          : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
+                      className={`py-1.5 text-[9px] font-semibold rounded border transition-all text-center cursor-pointer ${
+                        adjustments.invert ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-slate-900 bg-slate-900/10 text-slate-500 hover:border-slate-800'
                       }`}
                     >
                       Invert
@@ -943,19 +1341,20 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3 text-slate-600" id="editor-empty-state">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900/30 border border-slate-900 text-slate-700">
-                <ImageIcon className="h-6 w-6" />
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3 text-slate-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 border border-slate-900 text-slate-700">
+                <ImageIcon className="h-5 w-5" />
               </div>
               <div className="space-y-1 max-w-xs">
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Workbench Empty</h4>
-                <p className="text-[11px] text-slate-500">
-                  Select a capture source, snap a screenshot, or click a gallery thumbnail to start editing, copying, and sharing.
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">Workbench Unloaded</h4>
+                <p className="text-[10px] text-slate-500 leading-normal">
+                  Hover over any active stream video panel and click **"Snap Frame"** to load screenshots in the custom edit workbench.
                 </p>
               </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

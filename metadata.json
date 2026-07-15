@@ -1,6 +1,6 @@
 {
-  "name": "Screenshare with Chat",
-  "description": "Capture and edit high-resolution screen frames directly in your browser with advanced adjustments and preset filters.",
+  "name": "Screen Stream",
+  "description": "A context-aware multi-screen streaming workspace. Stream up to 10 screens simultaneously with an integrated AI developer chat feed that analyzes your active screen context in real-time.",
   "requestFramePermissions": ["camera", "microphone", "display-capture"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

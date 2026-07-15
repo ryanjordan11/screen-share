@@ -27,3 +27,20 @@ export interface ScreenshotItem {
   adjustments: ImageAdjustments;
   filter: PresetFilter;
 }
+
+export interface ScreenStream {
+  id: string;
+  label: string;
+  stream: MediaStream | null;
+  isActive: boolean;
+  timestamp: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'assistant' | 'system';
+  text: string;
+  timestamp: number;
+  isNotification?: boolean;
+  analyzedScreens?: string[]; // list of screen labels that were active when sent
+}
